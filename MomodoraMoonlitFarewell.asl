@@ -4,32 +4,10 @@ state("MomodoraMoonlitFarewell")
 
 startup
 {
-    var AslHelper = Assembly.Load(File.ReadAllBytes("Components/asl-help"));
-    AslHelper.CreateInstance("Unity");
-
-    vars.SceneManagerAddress = AslHelper.GetType("AslHelp.SceneManagement.SceneManager").GetProperty("Address", BindingFlags.Public | BindingFlags.Static);
+    Assembly.Load(File.ReadAllBytes("Components/asl-help")).CreateInstance("Unity");
 
     vars.Helper.GameName = "Momodora: Moonlit Farewell";
     vars.Helper.LoadSceneManager = true;
-}
-
-init
-{
-    current.Scene = "";
-    current.IsLoading = true;
-
-    current.BossRushIsActive = false;
-    current.BossIsActive = false;
-    current.BossId = "";
-    current.BossIsDead = false;
-    current.BossHP = 0;
-    current.TargetEnemyIsDead = false;
-
-    current.DialogueQueueLength = 0;
-    current.BrightnessScreenMode = 0;
-    current.StaffRollActive = false;
-
-    current.Events = new int[512];
 
     vars.Strings = new Dictionary<string,string> {
         { "", "(null)" },
@@ -56,94 +34,49 @@ init
         { "boss_21", "The Final Invocation of Selin" },
     };
 
-    Func<IntPtr, string, IntPtr> GameObjectFindComponentByName = null; // for recursive call
-    GameObjectFindComponentByName = (ManagedGameObjectPtr, ComponentName) =>
-    {
-        if (ManagedGameObjectPtr == IntPtr.Zero)
-            return IntPtr.Zero;
+    settings.Add("TimerStart", true, "Timer start conditions");
+    settings.Add("GameStarted", false, "On New Game started", "TimerStart");
+    settings.Add("GameModeSelected", true, "On Game Mode selected", "TimerStart");
+    settings.Add("FirstMomoDialog", false, "On first Momo dialog", "TimerStart");
 
-        var NativeGameObjectPtr = vars.Helper.Read<IntPtr>(ManagedGameObjectPtr + 0x10 /* ManagedGameObject.m_CachedPtr */);
-        if (NativeGameObjectPtr == IntPtr.Zero)
-            return IntPtr.Zero;
+    settings.Add("GameSplits", true, "General game splits");
+    settings.Add("SelinFinalBlow", false, "Selin final blow", "GameSplits");
+    settings.Add("DoraFinalDialog", true, "Final dialog with Dora started", "GameSplits");
+    settings.Add("Sprint", false, "Sprint acquired", "GameSplits");
+    settings.Add("DoubleJump", false, "Double Jump acquired", "GameSplits");
+    settings.Add("WallJump", false, "Wall Jump acquired", "GameSplits");
+    settings.Add("BerserkMode", false, "Lunar Attunement acquired", "GameSplits");
 
-        var NativeGameObjectName = vars.Helper.ReadString(256, ReadStringType.AutoDetect, NativeGameObjectPtr + 0x60 /* GameObject.m_Name */ + 0x0 /* ConstantString.m_Buffer */, 0x0 /* char* */);
-        if (string.IsNullOrEmpty(NativeGameObjectName))
-            return IntPtr.Zero;
-
-        var NativeComponentsCount = vars.Helper.Read<int>(NativeGameObjectPtr + 0x30 /* GameObject.m_Component */ + 0x10 /* dynamic_array.m_size */);
-        if (NativeComponentsCount == 0)
-            return IntPtr.Zero;
-
-        var RootTransformPtr = vars.Helper.Read<IntPtr>(NativeGameObjectPtr + 0x30 /* GameObject.m_Component */, 0x8 /* ComponentPair.component */); // First component is GameObject's root Transform
-        var RootTransformChildCount = vars.Helper.Read<int>(RootTransformPtr + 0x70 /* Transform.m_Children */ + 0x10 /* dynamic_array.m_size */);
-        for (int i = 0; i < RootTransformChildCount; ++i)
-        {
-            var NativeChildTransformPtr = vars.Helper.Read<IntPtr>(RootTransformPtr + 0x70 /* Transform.m_Children */, i * 0x8 /* ImmediatePtr */);
-            var NativeChildGameObjectPtr = vars.Helper.Read<IntPtr>(NativeChildTransformPtr + 0x30 /* Unity::Component.m_GameObject */);
-            var ManagedChildGameObjectPtr = vars.Helper.Read<IntPtr>(NativeChildGameObjectPtr + 0x18 /* Object.m_MonoReference */ + 0x10 /* ScriptingGCHandle.m_Object */);
-            var ManagedComponentPtr = GameObjectFindComponentByName(ManagedChildGameObjectPtr, ComponentName);
-            if (ManagedComponentPtr != IntPtr.Zero)
-                return ManagedComponentPtr;
-        }
-
-        for (int i = 0; i < NativeComponentsCount; ++i)
-        {
-            var NativeComponentPtr = vars.Helper.Read<IntPtr>(NativeGameObjectPtr + 0x30 /* GameObject.m_Component */, i * 0x10 /* ComponentPair */ + 0x8 /* ComponentPair.component */);
-            var ManagedComponentPtr = vars.Helper.Read<IntPtr>(NativeComponentPtr + 0x18 /* Object.m_MonoReference */ + 0x10 /* ScriptingGCHandle.m_Object */);
-            var ManagedComponentName = vars.Helper.ReadString(256, ReadStringType.AutoDetect, ManagedComponentPtr /* MonoObject.vtable */, 0x0 /* MonoVTable.klass */, 0x48 /* MonoClass.name */, 0x0 /* char* */);
-            if (!string.IsNullOrEmpty(ManagedComponentName) && ManagedComponentName == ComponentName)
-                return ManagedComponentPtr;
-        }
-
-        return IntPtr.Zero;
+    var BossIdArray = new string[] {
+        "boss_01", "boss_02", "boss_03", "boss_04", "boss_05", "boss_06", "boss_07",
+        "boss_08", "boss_09", "boss_10", "boss_11", "boss_12", "boss_13", "boss_14",
+        "boss_15", "boss_16", "boss_17", "boss_18", "boss_19", "boss_20", "boss_21",
     };
 
-    Func<IntPtr, string, IntPtr> SceneFindComponentByName = (ScenePtr, ComponentName) =>
+    settings.Add("BossSplits", false, "Boss defeat splits");
+    foreach (var BossId in BossIdArray)
     {
-        if (ScenePtr == IntPtr.Zero)
-            return IntPtr.Zero;
+        settings.Add(BossId + "_defeat", false, vars.Strings[BossId], "BossSplits");
+    }
+}
 
-        var SceneObjectsPrevPtr = vars.Helper.Read<IntPtr>(ScenePtr + 0xB0 /* UnityScene.m_Roots */ + 0x0 /* List.m_Root */ + 0x0 /* ListElement.m_Prev */);
-        var SceneObjectsNextPtr = vars.Helper.Read<IntPtr>(ScenePtr + 0xB0 /* UnityScene.m_Roots */ + 0x0 /* List.m_Root */ + 0x8 /* ListElement.m_Next */);
+init
+{
+    current.Scene = "";
+    current.IsLoading = true;
 
-        for (var AddressIt = SceneObjectsNextPtr; AddressIt != SceneObjectsPrevPtr && AddressIt != IntPtr.Zero; AddressIt = vars.Helper.Read<IntPtr>(AddressIt + 0x8 /* ListElement.m_Prev */))
-        {
-            var NativeTransformPtr = vars.Helper.Read<IntPtr>(AddressIt + 0x10 /* ListNode.m_Data */);
-            var NativeGameObjectPtr = vars.Helper.Read<IntPtr>(NativeTransformPtr + 0x30 /* Unity::Component.m_GameObject */);
-            var ManagedGameObjectPtr = vars.Helper.Read<IntPtr>(NativeGameObjectPtr + 0x18 /* Object.m_MonoReference */ + 0x10 /* ScriptingGCHandle.m_Object */);
-            var ManagedComponentPtr = GameObjectFindComponentByName(ManagedGameObjectPtr, ComponentName);
-            if (ManagedComponentPtr != IntPtr.Zero)
-                return ManagedComponentPtr;
-        }
+    current.BossRushIsActive = false;
+    current.BossIsActive = false;
+    current.BossId = "";
+    current.BossIsDead = false;
+    current.BossHP = 0;
+    current.TargetEnemyIsDead = false;
 
-        return IntPtr.Zero;
-    };
+    current.DialogueQueueLength = 0;
+    current.NavigationTitle = "";
+    current.StaffRollActive = false;
 
-    Func<IntPtr, string, IntPtr> SceneManagerFindComponentByName = (SceneManagerPtr, ComponentName) =>
-    {
-        if (SceneManagerPtr == IntPtr.Zero)
-            return IntPtr.Zero;
-
-        var SceneCount = vars.Helper.Read<int>(SceneManagerPtr + 0x8 /* RuntimeSceneManager.m_Scenes */ + 0x10 /* dynamic_array.m_size */);
-        for (int i = 0; i < SceneCount; ++i)
-        {
-            var ScenePtr = vars.Helper.Read<IntPtr>(SceneManagerPtr + 0x8 /* RuntimeSceneManager.m_Scenes */, i * IntPtr.Size /* UnityScene* */);
-            var ScenePath = vars.Helper.ReadString(256, ReadStringType.AutoDetect, ScenePtr + 0x10 /* UnityScene.m_ScenePath */, 0x0 /* char* */);
-            var SceneName = System.IO.Path.GetFileNameWithoutExtension(ScenePath);
-            var ManagedComponentPtr = SceneFindComponentByName(ScenePtr, ComponentName);
-            if (ManagedComponentPtr != IntPtr.Zero)
-                return ManagedComponentPtr;
-        }
-
-        return IntPtr.Zero;
-    };
-
-    vars.FindComponentByName = (Func<string, IntPtr>)(ComponentName =>
-    {
-        var SceneManagerPtr = vars.SceneManagerAddress.GetValue(IntPtr.Zero);
-        print("SceneManagerPtr: " + SceneManagerPtr);
-        return SceneManagerFindComponentByName(vars.Helper.Read<IntPtr>(SceneManagerPtr), ComponentName);
-    });
+    current.Events = new int[512];
 
     vars.Helper.TryLoad = (Func<dynamic, bool>)(mono =>
     {
@@ -170,16 +103,19 @@ init
         var DialogueManager = mono["DialogueManager"];
         vars.Helper["DialogueQueueLength"] = MainScr.Make<int>("dialogueManager", DialogueManager["queue"], 0x28);
 
-        var FirstBrightnessSetup = mono["FirstBrightnessSetup"];
-        var FirstBrightnessSetupPtr = vars.FindComponentByName("FirstBrightnessSetup");
-        vars.Helper["BrightnessScreenMode"] = vars.Helper.Make<int>(FirstBrightnessSetupPtr + FirstBrightnessSetup["m_mode"]);
-
         var StaffRoll = mono["StaffRoll"];
         vars.Helper["StaffRollActive"] = StaffRoll.Make<bool>("active");
 
         var GameData = mono["GameData"];
         var MomoEventData = mono["MomoEventData"];
         vars.Helper["Events"] = GameData.MakeArray<int>("current", "MomoEvent", MomoEventData["m_events"]);
+
+        var NavInputPrompt = mono["NavInputPrompt"];
+        vars.GetNavigationTitle = (Func<string>)(() =>
+        {
+            var TextEntries = vars.Helper.ReadList<IntPtr>(MainScr.Static + MainScr["NavInputPrompt"], NavInputPrompt["m_textEntries"]);
+            return TextEntries.Count == 0 ? string.Empty : vars.Helper.ReadString(256, ReadStringType.AutoDetect, TextEntries[0] + 0x14);
+        });
 
         return true;
     });
@@ -193,16 +129,22 @@ isLoading
 update
 {
     current.Scene = vars.Helper.Scenes.Active.Name;
-    current.BossIsDead = current.BossHP == 0;
+    current.BossIsDead = current.BossHP <= 0;
+    current.NavigationTitle = vars.GetNavigationTitle();
 
     if (old.Scene != current.Scene)
     {
-        print("Scene Transition: " + old.Scene + " > " + current.Scene + " Address: " + vars.Helper.Scenes.Active.Address);
+        print("Scene Transition: " + old.Scene + " > " + current.Scene);
+    }
+
+    if (current.BossIsActive && !current.BossIsDead && old.BossIsDead)
+    {
+        print("Boss Encountered: " + vars.Strings[current.BossId]);
     }
 
     if (current.BossIsActive && old.BossHP != current.BossHP)
     {
-        print("Boss Damage " + vars.Strings[current.BossId] + " HP: " + current.BossHP);
+        print("Boss Damage: " + vars.Strings[current.BossId] + " HP: " + current.BossHP);
     }
 
     if (current.BossIsActive && current.BossIsDead && !old.BossIsDead)
@@ -222,27 +164,40 @@ update
             print("Event: " + i + " = " + current.Events[i]);
         }
     }
+
+    if (old.NavigationTitle != current.NavigationTitle)
+    {
+        print("NavigationTitle: " + current.NavigationTitle);
+    }
 }
 
 start
 {
-    // on first Momo dialog
-    // return current.Scene == "Well01" && current.DialogueQueueLength == 3;
-
-    // on new game started
-    // return current.Scene == "BrightnessSetup";
-
-    // on game mode select
-    return old.BrightnessScreenMode == 2 && current.BrightnessScreenMode == 3;
+    return (settings["GameStarted"] && old.Scene != "BrightnessSetup" && current.Scene == "BrightnessSetup")
+        || (settings["GameModeSelected"] && old.NavigationTitle == "ui_navigation" && current.NavigationTitle == "ui_brightness")
+        || (settings["FirstMomoDialog"] && current.Scene == "Well01" && current.DialogueQueueLength == 3);
 }
 
 split
 {
-    // Selin final blow
-    // if (current.BossIsActive && current.BossId == "boss_20" && !old.BossIsDead && current.BossIsDead)
-    //     return true;
+    if (settings["SelinFinalBlow"] && current.BossIsActive && current.BossId == "boss_20" && !old.BossIsDead && current.BossIsDead)
+        return true;
 
-    // Final dialog with Dora
-    if (current.Scene == "Koho19" && current.DialogueQueueLength == 34)
+    if (settings["DoraFinalDialog"] && current.Scene == "Koho19" && old.DialogueQueueLength != 34 && current.DialogueQueueLength == 34)
+        return true;
+
+    if (settings["Sprint"] && current.Scene == "Well29" && old.Events[9] != 1 && current.Events[9] == 1)
+        return true;
+
+    if (settings["DoubleJump"] && current.Scene == "Bark42" && old.Events[10] != 1 && current.Events[10] == 1)
+        return true;
+
+    if (settings["WallJump"] && current.Scene == "Fairy10" && old.Events[194] != 1 && current.Events[194] == 1)
+        return true;
+
+    if (settings["BerserkMode"] && current.Scene == "Marsh08" && old.Events[131] != 1 && current.Events[131] == 1)
+        return true;
+
+    if (current.BossIsActive && current.BossIsDead && !old.BossIsDead && settings[current.BossId + "_defeat"])
         return true;
 }
