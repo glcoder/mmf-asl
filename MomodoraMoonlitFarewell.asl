@@ -40,8 +40,8 @@ startup
     settings.Add("FirstMomoDialog", false, "On first Momo dialog", "TimerStart");
 
     settings.Add("GameSplits", true, "General game splits");
-    settings.Add("SelinFinalBlow", false, "Selin final blow", "GameSplits");
     settings.Add("DoraFinalDialog", true, "Final dialog with Dora started", "GameSplits");
+    settings.Add("SacredLeaf", false, "Sacred Leaf awaken", "GameSplits");
     settings.Add("Sprint", false, "Sprint acquired", "GameSplits");
     settings.Add("DoubleJump", false, "Double Jump acquired", "GameSplits");
     settings.Add("WallJump", false, "Wall Jump acquired", "GameSplits");
@@ -68,9 +68,8 @@ init
     current.BossRushIsActive = false;
     current.BossIsActive = false;
     current.BossId = "";
-    current.BossIsDead = false;
     current.BossHP = 0;
-    current.TargetEnemyIsDead = false;
+    current.BossIsDead = false;
 
     current.DialogueQueueLength = 0;
     current.NavigationTitle = "";
@@ -89,16 +88,15 @@ init
         var Platformer3D = mono["Platformer3D"];
         vars.Helper["PlayerHP"] = Platformer3D.Make<float>("player_hp");
 
-        var CommonEnemy = mono["CommonEnemy"];
-        vars.Helper["TargetEnemyIsDead"] = MainScr.Make<bool>("p3d", Platformer3D["TargetEnemy"], CommonEnemy["dead"]);
-        
         var BossScr = mono["BossHPBarScr"];
         vars.Helper["BossIsActive"] = BossScr.Make<bool>("active");
-        vars.Helper["BossHP"] = BossScr.Make<float>("BossEnemyComponent", CommonEnemy["hp"]);
-        vars.Helper["BossIsDead"] = BossScr.Make<bool>("BossEnemyComponent", CommonEnemy["dead"]);
 
         var BossNamesScr = mono["BossNamesScr"];
         vars.Helper["BossId"] = BossNamesScr.MakeString("bossname");
+
+        var CommonEnemy = mono["CommonEnemy"];
+        vars.Helper["BossIsDead"] = BossNamesScr.Make<bool>("bossObj", CommonEnemy["dead"]);
+        vars.Helper["BossHP"] = BossNamesScr.Make<float>("bossObj", CommonEnemy["hp"]);
 
         var DialogueManager = mono["DialogueManager"];
         vars.Helper["DialogueQueueLength"] = MainScr.Make<int>("dialogueManager", DialogueManager["queue"], 0x28);
@@ -129,7 +127,6 @@ isLoading
 update
 {
     current.Scene = vars.Helper.Scenes.Active.Name;
-    current.BossIsDead = current.BossHP <= 0;
     current.NavigationTitle = vars.GetNavigationTitle();
 
     if (old.Scene != current.Scene)
@@ -137,19 +134,19 @@ update
         print("Scene Transition: " + old.Scene + " > " + current.Scene);
     }
 
-    if (current.BossIsActive && !current.BossIsDead && old.BossIsDead)
+    if (old.BossId != current.BossId && !string.IsNullOrEmpty(current.BossId))
     {
         print("Boss Encountered: " + vars.Strings[current.BossId]);
     }
 
-    if (current.BossIsActive && old.BossHP != current.BossHP)
+    if (!old.BossIsDead && current.BossIsDead)
+    {
+        print("Boss Defeated: " + vars.Strings[current.BossId]);
+    }
+    
+    if (old.BossHP != current.BossHP)
     {
         print("Boss Damage: " + vars.Strings[current.BossId] + " HP: " + current.BossHP);
-    }
-
-    if (current.BossIsActive && current.BossIsDead && !old.BossIsDead)
-    {
-        print("Boss Dead: " + vars.Strings[current.BossId]);
     }
 
     if (!old.StaffRollActive && current.StaffRollActive)
@@ -157,7 +154,7 @@ update
         print("StaffRollActive: " + current.StaffRollActive);
     }
 
-    for (int i = 0; i < 512; ++i)
+    for (int i = 0; i < current.Events.Length; ++i)
     {
         if (old.Events[i] != current.Events[i])
         {
@@ -180,10 +177,10 @@ start
 
 split
 {
-    if (settings["SelinFinalBlow"] && current.BossIsActive && current.BossId == "boss_20" && !old.BossIsDead && current.BossIsDead)
+    if (settings["DoraFinalDialog"] && current.Scene == "Koho19" && old.DialogueQueueLength != 34 && current.DialogueQueueLength == 34)
         return true;
 
-    if (settings["DoraFinalDialog"] && current.Scene == "Koho19" && old.DialogueQueueLength != 34 && current.DialogueQueueLength == 34)
+    if (settings["SacredLeaf"] && current.Scene == "Well26" && old.Events[20] != 1 && current.Events[20] == 1)
         return true;
 
     if (settings["Sprint"] && current.Scene == "Well29" && old.Events[9] != 1 && current.Events[9] == 1)
@@ -198,6 +195,6 @@ split
     if (settings["BerserkMode"] && current.Scene == "Marsh08" && old.Events[131] != 1 && current.Events[131] == 1)
         return true;
 
-    if (current.BossIsActive && current.BossIsDead && !old.BossIsDead && settings[current.BossId + "_defeat"])
+    if (!old.BossIsDead && current.BossIsDead && settings[current.BossId + "_defeat"])
         return true;
 }
