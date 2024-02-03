@@ -46,6 +46,10 @@ startup
     settings.Add("DoubleJump", false, "Double Jump acquired", "GameSplits");
     settings.Add("WallJump", false, "Wall Jump acquired", "GameSplits");
     settings.Add("BerserkMode", false, "Lunar Attunement acquired", "GameSplits");
+    settings.Add("FastTravel", false, "Fast Travel unlocked", "GameSplits");
+    settings.Add("SilverDust", false, "Silver Dust acquired", "GameSplits");
+    settings.Add("GoldenDust", false, "Golden Dust acquired", "GameSplits");
+    settings.Add("WindmillKey", false, "Windmill Key acquired", "GameSplits");
 
     var BossIdArray = new string[] {
         "boss_01", "boss_02", "boss_03", "boss_04", "boss_05", "boss_06", "boss_07",
@@ -67,8 +71,10 @@ init
 
     current.BossRushIsActive = false;
     current.BossIsActive = false;
+    current.LastBossPtr = IntPtr.Zero;
+    current.CurrentBossPtr = IntPtr.Zero;
     current.BossId = "";
-    current.BossHP = 0;
+    current.BossHP = 0.0f;
     current.BossIsDead = false;
 
     current.DialogueQueueLength = 0;
@@ -76,6 +82,9 @@ init
     current.StaffRollActive = false;
 
     current.Events = new int[512];
+
+    vars.CommonEnemyDeadOffset = 0;
+    vars.CommonEnemyHealthOffset = 0;
 
     vars.Helper.TryLoad = (Func<dynamic, bool>)(mono =>
     {
@@ -90,13 +99,15 @@ init
 
         var BossScr = mono["BossHPBarScr"];
         vars.Helper["BossIsActive"] = BossScr.Make<bool>("active");
+        vars.Helper["CurrentBossPtr"] = BossScr.Make<IntPtr>("BossEnemyComponent");
+        vars.Helper["CurrentBossPtr"].FailAction = MemoryWatcher.ReadFailAction.SetZeroOrNull;
 
         var BossNamesScr = mono["BossNamesScr"];
         vars.Helper["BossId"] = BossNamesScr.MakeString("bossname");
 
         var CommonEnemy = mono["CommonEnemy"];
-        vars.Helper["BossIsDead"] = BossNamesScr.Make<bool>("bossObj", CommonEnemy["dead"]);
-        vars.Helper["BossHP"] = BossNamesScr.Make<float>("bossObj", CommonEnemy["hp"]);
+        vars.CommonEnemyDeadOffset = CommonEnemy["dead"];
+        vars.CommonEnemyHealthOffset = CommonEnemy["hp"];
 
         var DialogueManager = mono["DialogueManager"];
         vars.Helper["DialogueQueueLength"] = MainScr.Make<int>("dialogueManager", DialogueManager["queue"], 0x28);
@@ -128,6 +139,13 @@ update
 {
     current.Scene = vars.Helper.Scenes.Active.Name;
     current.NavigationTitle = vars.GetNavigationTitle();
+
+    current.LastBossPtr = current.CurrentBossPtr == IntPtr.Zero ? old.LastBossPtr : current.CurrentBossPtr;
+    if (current.LastBossPtr != IntPtr.Zero)
+    {
+        current.BossHP = vars.Helper.Read<float>(current.LastBossPtr + vars.CommonEnemyHealthOffset);
+        current.BossIsDead = vars.Helper.Read<bool>(current.LastBossPtr + vars.CommonEnemyDeadOffset);
+    }
 
     if (old.Scene != current.Scene)
     {
@@ -193,6 +211,18 @@ split
         return true;
 
     if (settings["BerserkMode"] && current.Scene == "Marsh08" && old.Events[131] != 1 && current.Events[131] == 1)
+        return true;
+
+    if (settings["FastTravel"] && current.Scene == "Cove03" && old.Events[190] != 1 && current.Events[190] == 1)
+        return true;
+
+    if (settings["GoldenDust"] && current.Scene == "Koho16" && old.Events[180] != 1 && current.Events[180] == 1)
+        return true;
+
+    if (settings["SilverDust"] && current.Scene == "Bark41" && old.Events[181] != 1 && current.Events[181] == 1)
+        return true;
+
+    if (settings["WindmillKey"] && current.Scene == "Demon01" && old.Events[212] != 1 && current.Events[212] == 1)
         return true;
 
     if (!old.BossIsDead && current.BossIsDead && settings[current.BossId + "_defeat"])
