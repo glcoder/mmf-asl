@@ -145,6 +145,9 @@ update
     {
         current.BossHP = vars.Helper.Read<float>(current.LastBossPtr + vars.CommonEnemyHealthOffset);
         current.BossIsDead = vars.Helper.Read<bool>(current.LastBossPtr + vars.CommonEnemyDeadOffset);
+
+         if (old.Scene != current.Scene || current.BossIsDead)
+            current.LastBossPtr = IntPtr.Zero;
     }
 
     if (old.Scene != current.Scene)
